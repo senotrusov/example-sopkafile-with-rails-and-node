@@ -1,1 +1,1 @@
-# put your postgresql's tsearch dictionaries here
+### put your postgresql's tsearch dictionaries here

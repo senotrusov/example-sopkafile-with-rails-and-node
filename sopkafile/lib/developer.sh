@@ -19,14 +19,14 @@ sopka-menu::add developer::dump-source-database || fail
 sopka-menu::add developer::sync-from-source-database || fail
 
 developer::deploy(){
-  # cleanup cache
-  rm -rf node_modules public/packs/* tmp/cache/* || fail
+  # cleanup cache and installed modules
+  rm -rf node_modules public/assets/* public/packs/* tmp/cache/* || fail
 
   # install shellrc loader
   shellrc::install-loader "${HOME}/.bashrc" || fail
 
   # base parts with root privileges
-  deploy-base-parts-with-root-privileges || fail
+  task::run-with-install-filter deploy-base-parts-with-root-privileges || fail
 
   # postgresql dictionaries
   postgresql::install-dictionaries db/tsearch_data || fail
@@ -38,7 +38,7 @@ developer::deploy(){
   deploy-base-parts-with-application-privileges || fail
 
   # packages
-  install-nodejs-and-ruby-packages || fail
+  install-packages-for-nodejs-and-ruby || fail
 
   # database
   production::database-source::env database::with-config developer::deploy-database || fail

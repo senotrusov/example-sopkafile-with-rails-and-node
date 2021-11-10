@@ -15,53 +15,19 @@
 #  limitations under the License.
 
 deploy-base-parts-with-root-privileges(){
-  # shellcheck disable=2034
-  local SOPKA_TASK_STDERR_FILTER=task::install-filter
-
   # perform autoremove, update and upgrade
-  task::run apt::autoremove-lazy-update-and-maybe-dist-upgrade || fail
+  apt::autoremove-lazy-update-and-maybe-dist-upgrade || fail
 
   # install tools to use by the rest of the script
-  task::run apt::install-sopka-essential-dependencies || fail
-
-  # install terminal software
-  task::run install-terminal-software || fail
+  apt::install-sopka-essential-dependencies || fail
 
   # install display-if-restart-required dependencies
-  task::run apt::install-display-if-restart-required-dependencies || fail
+  apt::install-display-if-restart-required-dependencies || fail
 
   # install benchmark
-  task::run benchmark::install::apt || fail
+  benchmark::install::apt || fail
 
-  # install build dependencies
-  task::run install-build-dependencies || fail
-  task::run ruby::install-dependencies::apt || fail
-
-  # install and configure servers
-  task::run install-and-configure-servers || fail
-
-  # configure imagemagick
-  task::run configure-imagemagick || fail
-
-  # programming languages
-  task::run install-and-update-python || fail
-}
-
-deploy-base-parts-with-application-privileges(){
-  # shellcheck disable=2034
-  local SOPKA_TASK_STDERR_FILTER=task::install-filter
-
-  # install programming languages
-  task::run install-nodejs || fail
-  task::run-with-rubygems-fail-detector install-and-update-ruby || fail
-
-  # activate and allow direnv
-  shellrc::install-direnv-rc || fail
-  direnv allow . || fail
-}
-
-# terminal software
-install-terminal-software() {
+  # install terminal software
   apt::install \
     apache2-utils \
     awscli \
@@ -78,75 +44,55 @@ install-terminal-software() {
     ssh-import-id \
     tmux \
       || fail
-}
 
-# build dependencies
-install-build-dependencies(){
+  # install build dependencies
+  ruby::install-dependencies::apt || fail #!
   apt::install \
     build-essential \
     libssl-dev \
       || fail
-}
 
-# servers
-install-and-configure-servers(){
+  # install servers
   apt::install memcached || fail
   apt::install postgresql postgresql-contrib libpq-dev || fail
   apt::install redis-server || fail
   apt::install letsencrypt nginx || fail
 
-  # postgresql
-  sudo systemctl --now enable postgresql || fail
+  # configure and run postgresql
+  sudo systemctl --quiet --now enable postgresql || fail
   postgresql::create-role-if-not-exists "${APP_USER:-"${USER}"}" WITH CREATEDB LOGIN || fail
-}
 
-# imagemagick
-configure-imagemagick() {
+  # configure imagemagick
   imagemagick::set-policy::resource width 64KP || fail
   imagemagick::set-policy::resource height 64KP || fail
+  imagemagick::set-policy::resource disk 16GiB || fail # ((64 * 1024) * (64 * 1024) * 4) / 1024 / 1024 = 16384
 
-  # ((64 * 1024) * (64 * 1024) * 4) / 1024 / 1024 = 16384
-  imagemagick::set-policy::resource disk 16GiB || fail
-}
-
-# python
-install-and-update-python() {
+  # python
   python::install-and-update::apt || fail
   apt::install python2 || fail # used by node-sass
 }
 
-# nodejs
-install-nodejs() {
+deploy-base-parts-with-application-privileges(){
+  # install nodejs
   nodejs::install::nodenv || fail
   npm install --global yarn || fail
   nodenv rehash || fail
-}
 
-# ruby
-install-and-update-ruby() {
+  # install ruby
   ruby::dangerously-append-nodocument-to-gemrc || fail
   ruby::install-without-dependencies::rbenv || fail
 
-  # TODO: newer ruby versions already contains bundler, remove it eventually
-  gem install bundler --conservative || fail
-  rbenv rehash || fail
-}
-
-# production mode for ruby packages
-set-production-mode-for-ruby-packages() {
-  ruby::load-rbenv || fail
-
-  bundle config --local deployment true || fail
-  bundle config --local without "development test" || fail
-  bundle config --local path "${HOME}/.cache/ruby-bundle" || fail
+  # activate and allow direnv
+  shellrc::install-direnv-rc || fail
+  direnv allow . || fail
 }
 
 # nodejs and ruby packages
-install-nodejs-and-ruby-packages() {
+install-packages-for-nodejs-and-ruby() {
   nodejs::load-nodenv || fail
   ruby::load-rbenv || fail
 
-  bundle install --retry=6 || fail
+  bundle install --retry=6 || fail # TODO: Do I need task::run-with-rubygems-fail-detector here?
   rbenv rehash || fail
 
   yarn --frozen-lockfile --non-interactive || fail

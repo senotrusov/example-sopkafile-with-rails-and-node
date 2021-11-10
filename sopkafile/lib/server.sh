@@ -22,7 +22,7 @@ server::deploy() {
   export APP_RELEASE
 
   # base part with root privileges
-  task::ssh-jump deploy-base-parts-with-root-privileges || fail
+  ssh::task-with-install-filter deploy-base-parts-with-root-privileges || fail
 
   # postgresql dictionaries
   ssh::task-with-remote-temp-copy db/tsearch_data postgresql::install-dictionaries || fail
@@ -36,8 +36,11 @@ server::deploy() {
   # server part with application privileges
   production::env::as-app-user ssh::task-with-install-filter server::deploy-parts-with-application-privileges || fail
 
-  # build new release
-  production::env::as-app-user server::perform-application-release || fail
+  # create new release
+  production::env::as-app-user server::create-application-release || fail
+
+  # deploy within release dir
+  production::env::as-app-user app-release::with-release-remote-dir server::deploy-within-application-release || fail
 
   # create or update nginx config
   SOPKA_RSYNC_DELETE_AND_BACKUP=true task::run rsync::sync-to-remote sopkafile/nginx/ /etc/nginx || fail
@@ -90,7 +93,7 @@ server::deploy-parts-with-application-privileges() {
   shellrc::install-loader ".bash_profile" || fail
 }
 
-server::perform-application-release() {
+server::create-application-release() {
   # shellcheck disable=2034
   local SOPKA_TASK_STDERR_FILTER=task::install-filter
 
@@ -112,9 +115,6 @@ server::perform-application-release() {
 
   # link shared files
   ssh::task app-release::link-shared-file db/dumps || fail
-
-  # deploy within release dir
-  app-release::with-release-remote-dir server::deploy-within-application-release || fail
 }
 
 server::deploy-within-application-release() {
@@ -122,8 +122,8 @@ server::deploy-within-application-release() {
   ssh::task deploy-base-parts-with-application-privileges || fail
 
   # packages
-  ssh::task set-production-mode-for-ruby-packages || fail
-  ssh::task install-nodejs-and-ruby-packages || fail
+  ssh::task server::set-production-mode-for-ruby-packages || fail
+  ssh::task install-packages-for-nodejs-and-ruby || fail
 
   # write NODE_ENV & RAILS_ENV values to app-env
   ssh::task app-env::write-env runtime-env NODE_ENV RAILS_ENV || fail
@@ -163,6 +163,14 @@ server::deploy-database() {
   ssh::task database::with-config database::restore || fail
 }
 
+server::set-production-mode-for-ruby-packages() {
+  ruby::load-rbenv || fail
+
+  bundle config --local deployment true || fail
+  bundle config --local without "development test" || fail
+  bundle config --local path "${HOME}/.cache/ruby-bundle" || fail
+}
+
 server::precompile-assets() {
   # load node & rails
   nodejs::load-nodenv || fail
@@ -184,13 +192,13 @@ server::switch-to-next-application-version() {
   # TODO: run database migrations
 
   # create or update systemd units
-  app-units::write-units || fail
+  units::create-all || fail
 
   # link release as current
   ( cd "/home/${APP_USER}" && app-release::link-as-current ) || fail
 
   # restart app servers
-  app-units::hot-restart || fail
+  units::all app-units::restart-services || fail
 
   # reload nginx
   systemctl reload-or-restart nginx.service || fail
