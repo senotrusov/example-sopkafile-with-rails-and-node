@@ -76,7 +76,7 @@ server::deploy-parts-with-root-privileges() {
   # add app user
   linux::add-user "${APP_USER}" || fail
   linux::assign-user-to-group "${APP_USER}" www-data || fail
-  ssh::import-id "gh:${MY_GITHUB_USERNAME}" "${APP_USER}" || fail
+  ssh::copy-authorized-keys-to-user "${APP_USER}" || fail
   
   # enable systemd user instance without the need for the user to login
   sudo loginctl enable-linger "${APP_USER}" || fail

@@ -27,9 +27,6 @@ production::env() {(
 )}
 
 production::env::template() {(
-  # TODO: remove this and just copy .ssh/authorized_keys from root
-  export MY_GITHUB_USERNAME="" # import ssh key from this github profile to the ${APP_USER} account
-
   export NODE_ENV=production
   export RAILS_ENV=production
 
