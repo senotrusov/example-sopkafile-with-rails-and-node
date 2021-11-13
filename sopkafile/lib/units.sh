@@ -100,9 +100,10 @@ units::create-rails-service() {
   local socketUnitFile="${APP_NAME}-${serviceName}.socket"
   local serviceUnitFile="${APP_NAME}-${serviceName}.service"
 
-  dir::make-if-not-exists "${socketsDir}" || fail
+  local socketsDirMode; socketsDirMode="$(production::env::as-app-user dir::default-mode-with-remote-umask)" || fail
+
+  dir::make-if-not-exists "${socketsDir}" "${socketsDirMode}" "${APP_USER}" www-data || fail
   chgrp www-data "${appDir}" || fail
-  chgrp www-data "${socketsDir}" || fail
 
   # create a rails service
   local wants="${APP_NAME}-resque.service"

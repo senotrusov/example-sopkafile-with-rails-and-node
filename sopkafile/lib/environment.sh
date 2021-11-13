@@ -42,7 +42,7 @@ production::env::template() {(
 )}
 
 production::env::as-app-user() {
-  local REMOTE_UMASK=27
+  local REMOTE_UMASK=0027
   local REMOTE_USER="${APP_USER}"
 
   "$@"
