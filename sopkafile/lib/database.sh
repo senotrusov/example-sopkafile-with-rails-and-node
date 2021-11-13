@@ -18,7 +18,7 @@
 
 # wrapper script to perform something with db config loaded
 database::with-config() {(
-  ruby::load-rbenv || fail
+  rbenv::load-shellrc || fail
   export PGDATABASE; PGDATABASE="$(rails::get-database-config database)" || fail
   "$@"
 )}
@@ -33,11 +33,13 @@ database::get-database-name() {
 }
 
 database::sync-from-remote() {
+  local appDir="${APP_DIR:-"${APP_NAME:?}"}"
+
   # shellcheck disable=SC2034
   local SOPKA_RSYNC_ARGS=(--delete)
 
   # sync remote db dump from remote
-  rsync::sync-from-remote "${APP_DIR}"/current/db/dumps/latest db/dumps || fail
+  rsync::sync-from-remote "${appDir}"/current/db/dumps/latest db/dumps || fail
 }
 
 database::sync-to-remote() {
@@ -65,8 +67,10 @@ database::restore(){
 
 # TODO: check if that function is in proper environment to do it's work
 database::dump-source-database(){
-  cd "${APP_DIR}/current" || fail
-  
+  local appDir="${APP_DIR:-"${APP_NAME:?}"}"
+
+  cd "${appDir}/current" || fail
+
   local tempDir; tempDir="$(mktemp -d db/dumps/latest-XXXXXXXXXX)" || fail
 
   pg_dump \

@@ -30,15 +30,12 @@ production::env::template() {(
   export NODE_ENV=production
   export RAILS_ENV=production
 
+  # export APP_DIR="example-project-main" # if not defined, value of APP_NAME will be used
+  export APP_DOMAINS="www.example.com, example.com"
   export APP_NAME=example-project
-
-  export APP_DIR="${APP_NAME}" # TODO: Should not have nested directories, fix other TODOs to make it happen
   export APP_USER=example-user
 
-  export LETSENCRYPT_CERT_NAME="${APP_NAME}"
-  export LETSENCRYPT_DOMAINS="www.example.com, example.com"
-
-  local REMOTE_ENV="NODE_ENV RAILS_ENV APP_NAME APP_DIR APP_USER APP_RELEASE LETSENCRYPT_CERT_NAME LETSENCRYPT_DOMAINS"
+  local REMOTE_ENV="NODE_ENV RAILS_ENV APP_DOMAINS APP_NAME APP_DIR APP_USER APP_RELEASE"
   local REMOTE_USER="root"
 
   "$@"

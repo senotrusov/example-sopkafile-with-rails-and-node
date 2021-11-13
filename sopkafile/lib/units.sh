@@ -14,28 +14,39 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# APP_DIR
-# APP_RELEASE?
+# APP_RELEASE
 # APP_USER
 # APP_NAME
 # RAILS_ENV
+# NODE_ENV
 
-units::create-service() {
+units::write-unit-file() {
   local serviceName="$1"
   local execStart="$2"
 
-  # If I choose to use the path with the ${APP_RELEASE} then I got systemd error:
+  local serviceUnitFile="${APP_NAME}-${serviceName}.service"
+  local appDir; appDir="$(app-release::get-absolute-app-dir)" || fail
+
+  local defaultPath; defaultPath="$(linux::get-default-path-variable)" || fail
+  local nodenvPath; nodenvPath="$(nodenv::path-variable "${APP_USER}")" || fail
+  local rbenvPath; rbenvPath="$(rbenv::path-variable "${APP_USER}")" || fail
+
+  # It works, but systemd logs a warning, so I'm not 100% sure that changing the command string is a right way
   # "Current command vanished from the unit file, execution of the command list won't be resumed."
-  # it still works, but I'm not sure - is it a right way or not
-  # local appReleasePath="/home/${APP_USER}/${APP_DIR}/releases/${APP_RELEASE}"
+  local appReleasePath="${appDir}/releases/${APP_RELEASE}" # option "a" (with warning)
+  # local appReleasePath="${appDir}/current" # option "b" (without warning, but relies on a symlink and could potentially create a race condition somewhere)
 
-  local appReleasePath="/home/${APP_USER}/${APP_DIR}/current"
-
-  systemd::write-system-unit "${APP_NAME}-${serviceName}.service" <<SHELL || fail
+  systemd::write-system-unit "${serviceUnitFile}" <<SHELL || fail
 [Unit]
 Description=${APP_NAME} ${serviceName}
-Requires=local-fs.target remote-fs.target network.target nss-lookup.target time-sync.target postgresql.service memcached.service redis-server.service ${requires:-}
-After=   local-fs.target remote-fs.target network.target nss-lookup.target time-sync.target postgresql.service memcached.service redis-server.service ${after:-}
+
+After=local-fs.target remote-fs.target network.target nss-lookup.target time-sync.target
+
+Requires=postgresql.service memcached.service redis-server.service
+After=   postgresql.service memcached.service redis-server.service
+
+${requires:+"Requires=${requires}"}
+${wants:+"Wants=${wants}"}
 
 [Service]
 Type=simple
@@ -48,7 +59,8 @@ User=${APP_USER}
 WorkingDirectory=${appReleasePath}
 SyslogIdentifier=${APP_NAME}-${serviceName}
 
-Environment=PATH=/home/${APP_USER}/.rbenv/shims:/home/${APP_USER}/.rbenv/bin:/home/${APP_USER}/.nodenv/shims:/home/${APP_USER}/.nodenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+Environment=PATH=${rbenvPath}:${nodenvPath}:${defaultPath}
+Environment=NODE_ENV=${NODE_ENV}
 Environment=RAILS_ENV=${RAILS_ENV}
 Environment=RAILS_LOG_TO_STDOUT=true
 
@@ -62,8 +74,14 @@ ${serviceLines}
 [Install]
 WantedBy=multi-user.target
 SHELL
+}
 
-  systemctl --quiet reenable "${APP_NAME}-${serviceName}.service" || fail
+units::create-service() {
+  local serviceName="$1"
+  local serviceUnitFile="${APP_NAME}-${serviceName}.service"
+
+  units::write-unit-file "$@" || fail
+  systemctl --quiet reenable "${serviceUnitFile}" || fail
 }
 
 units::create-resque-service() {
@@ -73,22 +91,28 @@ units::create-resque-service() {
 
 units::create-rails-service() {
   local serviceName="$1"
-  
-  local socketsDir="/home/${APP_USER}/${APP_DIR}/sockets"
+
+  local appDir; appDir="$(app-release::get-absolute-app-dir)" || fail
+
+  local socketsDir="${appDir}/sockets"
   local socketPath="${socketsDir}/${serviceName}.socket"
 
-  local requires="${APP_NAME}-resque.service ${APP_NAME}-${serviceName}.socket"
-  local after="${APP_NAME}-resque.service"
-  local serviceLines="Environment=PUMA_BIND=unix://${socketPath}"
+  local socketUnitFile="${APP_NAME}-${serviceName}.socket"
+  local serviceUnitFile="${APP_NAME}-${serviceName}.service"
 
   dir::make-if-not-exists "${socketsDir}" || fail
-
-  chgrp www-data "/home/${APP_USER}/${APP_DIR}" || fail # TODO: This will not produce a desirable result if APP_DIR contains nested directories, e.g. "foo/bar"
+  chgrp www-data "${appDir}" || fail
   chgrp www-data "${socketsDir}" || fail
 
-  units::create-service "${serviceName}" "bin/puma" || fail
+  # create a rails service
+  local wants="${APP_NAME}-resque.service"
+  local requires="${socketUnitFile}"
+  local serviceLines="Environment=PUMA_BIND=unix://${socketPath}"
 
-  systemd::write-system-unit "${APP_NAME}-${serviceName}.socket" <<SHELL || fail
+  units::write-unit-file "${serviceName}" "bin/puma" || fail
+
+  # write unit file
+  systemd::write-system-unit "${socketUnitFile}" <<SHELL || fail
 [Unit]
 Description=${APP_NAME} ${serviceName} socket
 
@@ -105,7 +129,7 @@ Backlog=1024
 WantedBy=sockets.target
 SHELL
 
-  systemctl --quiet reenable "${APP_NAME}-${serviceName}.socket" || fail
+  systemctl --quiet reenable "${serviceUnitFile}" "${socketUnitFile}" || fail
 }
 
 # shellcheck disable=2034

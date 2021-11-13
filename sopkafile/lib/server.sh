@@ -82,7 +82,7 @@ server::deploy-parts-with-root-privileges() {
   sudo loginctl enable-linger "${APP_USER}" || fail
 
   # install sopka for use in letsencrypt
-  git::place-up-to-date-clone "https://github.com/senotrusov/sopka.git" "${HOME}/.sopka" || fail
+  sopka::install-as-repository-clone || fail
 
   # run letsencrypt
   letsencrypt::certonly || fail
@@ -99,14 +99,14 @@ server::create-application-release() {
 
   # init dir layout
   ssh::task app-release::init || fail
-  ssh::task chgrp www-data "${APP_DIR}" || fail
+  ssh::task app-release::change-app-dir-group www-data || fail
 
   # push local repo
-  app-release::push-local-repo-to-remote || fail
+  task::run app-release::push-local-repo-to-remote || fail
 
   # make release dir
-  APP_RELEASE="$(ssh::call app-release::make 750 "${APP_USER}" www-data)" || fail 
-  
+  APP_RELEASE="$(ssh::call app-release::make-with-group www-data)" || fail 
+
   # clone to that release dir
   ssh::task app-release::clone || fail
 
@@ -164,7 +164,7 @@ server::deploy-database() {
 }
 
 server::set-production-mode-for-ruby-packages() {
-  ruby::load-rbenv || fail
+  rbenv::load-shellrc || fail
 
   bundle config --local deployment true || fail
   bundle config --local without "development test" || fail
@@ -173,8 +173,8 @@ server::set-production-mode-for-ruby-packages() {
 
 server::precompile-assets() {
   # load node & rails
-  nodejs::load-nodenv || fail
-  ruby::load-rbenv || fail
+  nodenv::load-shellrc || fail
+  rbenv::load-shellrc || fail
 
   # precompile rails assets 
   bin/rake assets:precompile || fail
@@ -195,7 +195,7 @@ server::switch-to-next-application-version() {
   units::create-all || fail
 
   # link release as current
-  ( cd "/home/${APP_USER}" && app-release::link-as-current ) || fail
+  app-release::link-as-current || fail
 
   # restart app servers
   units::all app-units::restart-services || fail

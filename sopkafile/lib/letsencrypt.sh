@@ -24,9 +24,9 @@ letsencrypt::certonly() {
   fi
 
   sudo letsencrypt certonly \
-    --cert-name "${LETSENCRYPT_CERT_NAME}" \
+    --cert-name "${LETSENCRYPT_CERT_NAME:-"${APP_NAME:?}"}" \
     --deploy-hook "systemctl reload nginx.service" \
-    --domains "${LETSENCRYPT_DOMAINS}" \
+    --domains "${LETSENCRYPT_DOMAINS:-"${APP_DOMAINS:?}"}" \
     --manual \
     --manual-auth-hook "/root/.sopka/bin/sopka leaseweb::domains::set-acme-challenge /root/.keys/leaseweb.key" \
     --manual-cleanup-hook "/root/.sopka/bin/sopka leaseweb::domains::clear-acme-challenge /root/.keys/leaseweb.key" \

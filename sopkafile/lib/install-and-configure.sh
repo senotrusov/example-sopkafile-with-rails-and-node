@@ -46,7 +46,7 @@ deploy-base-parts-with-root-privileges(){
       || fail
 
   # install build dependencies
-  ruby::install-dependencies::apt || fail #!
+  ruby::install-dependencies-by-apt || fail
   apt::install \
     build-essential \
     libssl-dev \
@@ -74,13 +74,13 @@ deploy-base-parts-with-root-privileges(){
 
 deploy-base-parts-with-application-privileges(){
   # install nodejs
-  nodejs::install::nodenv || fail
+  nodejs::install-by-nodenv || fail
   npm install --global yarn || fail
   nodenv rehash || fail
 
   # install ruby
   ruby::dangerously-append-nodocument-to-gemrc || fail
-  ruby::install-without-dependencies::rbenv || fail
+  ruby::install-without-dependencies-by-rbenv || fail
 
   # activate and allow direnv
   shellrc::install-direnv-rc || fail
@@ -89,8 +89,8 @@ deploy-base-parts-with-application-privileges(){
 
 # nodejs and ruby packages
 install-packages-for-nodejs-and-ruby() {
-  nodejs::load-nodenv || fail
-  ruby::load-rbenv || fail
+  nodenv::load-shellrc || fail
+  rbenv::load-shellrc || fail
 
   bundle install --retry=6 || fail # TODO: Do I need task::run-with-rubygems-fail-detector here?
   rbenv rehash || fail
